@@ -979,17 +979,23 @@ function DevicesMap({ devices, onSelectDevice }: {
     return null
   }
 
-  // Generate OpenStreetMap URL with markers
-  const getMapUrl = () => {
-    const bbox = [
-      Math.min(...devicesWithCoords.map(d => d.longitude || 0)) - 0.01,
-      Math.min(...devicesWithCoords.map(d => d.latitude || 0)) - 0.01,
-      Math.max(...devicesWithCoords.map(d => d.longitude || 0)) + 0.01,
-      Math.max(...devicesWithCoords.map(d => d.latitude || 0)) + 0.01
-    ]
+  // Calculate map bounds
+  const minLat = Math.min(...devicesWithCoords.map(d => d.latitude || 0))
+  const maxLat = Math.max(...devicesWithCoords.map(d => d.latitude || 0))
+  const minLon = Math.min(...devicesWithCoords.map(d => d.longitude || 0))
+  const maxLon = Math.max(...devicesWithCoords.map(d => d.longitude || 0))
 
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox.join(',')}&layer=mapnik&marker=${devicesWithCoords.map(d => `${d.latitude},${d.longitude}`).join('&marker=')}`
-  }
+  // Calculate center and zoom
+  const centerLat = (minLat + maxLat) / 2
+  const centerLon = (minLon + maxLon) / 2
+
+  // Use static OSM tile with markers overlaid
+  const zoom = 14
+  const tileSize = 256
+  const tileUrl = `https://tile.openstreetmap.org/${zoom}/${Math.floor((centerLon + 180) / 360 * Math.pow(2, zoom))}/${Math.floor((1 - Math.log(Math.tan(centerLat * Math.PI / 180) + 1 / Math.cos(centerLat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom))}.png`
+
+  // For multiple devices, show a simple coordinate list with links
+  const hasMultipleDevices = devicesWithCoords.length > 1
 
   return (
     <div className="mt-8">
@@ -998,57 +1004,97 @@ function DevicesMap({ devices, onSelectDevice }: {
         Расположение транспортных средств
       </h2>
       <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-4">
-          {/* Map iframe */}
-          <div className="lg:col-span-3 h-80 bg-slate-900">
-            <iframe
-              src={getMapUrl()}
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              loading="lazy"
-              title="Карта устройств"
-            />
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-3">
           {/* Device list */}
-          <div className="lg:col-span-1 border-l border-slate-700">
-            <div className="p-3 border-b border-slate-700">
+          <div className="lg:col-span-1 border-r border-slate-700">
+            <div className="p-3 border-b border-slate-700 bg-slate-800/50">
               <h3 className="text-sm font-medium text-slate-300">Устройства ({devicesWithCoords.length})</h3>
             </div>
-            <ScrollArea className="h-[calc(100%-48px)]">
+            <ScrollArea className="h-72">
               <div className="p-2 space-y-1">
-                {devicesWithCoords.map(device => (
+                {devicesWithCoords.map((device, index) => (
                   <div
                     key={device.id}
-                    className="flex items-center gap-2 p-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors"
+                    className="flex items-center gap-2 p-3 rounded bg-slate-700/30 hover:bg-slate-700/50 cursor-pointer transition-colors"
                     onClick={() => onSelectDevice(device.id)}
                   >
-                    <div className={`w-2 h-2 rounded-full ${device.ign_state ? 'bg-green-500' : 'bg-slate-500'}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">{device.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {device.speed ?? 0} км/ч
-                        {device.ign_state !== undefined && (
-                          <span className={device.ign_state ? 'text-green-400 ml-1' : 'text-slate-500 ml-1'}>
-                            {device.ign_state ? '• движется' : '• стоит'}
-                          </span>
-                        )}
-                      </p>
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+                      {index + 1}
                     </div>
-                    <a
-                      href={`https://www.openstreetmap.org/?mlat=${device.latitude}&mlon=${device.longitude}#map=15/${device.latitude}/${device.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-slate-400 hover:text-blue-400 p-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MapPin className="h-4 w-4" />
-                    </a>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium truncate">{device.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {device.latitude?.toFixed(4)}, {device.longitude?.toFixed(4)}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-xs ${device.ign_state ? 'text-green-400' : 'text-slate-500'}`}>
+                          {device.ign_state ? '🚗 Двигатель' : '🔒 Стоит'}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {device.speed ?? 0} км/ч
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <a
+                        href={`https://www.openstreetmap.org/?mlat=${device.latitude}&mlon=${device.longitude}#map=16/${device.latitude}/${device.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded bg-slate-600 hover:bg-blue-600 text-white text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                        title="OpenStreetMap"
+                      >
+                        OSM
+                      </a>
+                      <a
+                        href={`https://yandex.ru/maps/?pt=${device.longitude},${device.latitude}&z=16&l=map`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded bg-slate-600 hover:bg-yellow-600 text-white text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Яндекс.Карты"
+                      >
+                        Яндекс
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
+          </div>
+
+          {/* Map iframe - single device or combined view */}
+          <div className="lg:col-span-2 h-72 bg-slate-900 relative">
+            {hasMultipleDevices ? (
+              <iframe
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${minLon - 0.02},${minLat - 0.01},${maxLon + 0.02},${maxLat + 0.01}&layer=mapnik&marker=${devicesWithCoords.map(d => `${d.latitude},${d.longitude}`).join('&marker=')}`}
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                title="Карта устройств"
+              />
+            ) : (
+              <iframe
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${(devicesWithCoords[0]?.longitude || 0) - 0.02},${(devicesWithCoords[0]?.latitude || 0) - 0.01},${(devicesWithCoords[0]?.longitude || 0) + 0.02},${(devicesWithCoords[0]?.latitude || 0) + 0.01}&layer=mapnik&marker=${devicesWithCoords[0]?.latitude},${devicesWithCoords[0]?.longitude}`}
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                title="Карта устройств"
+              />
+            )}
+            {/* Marker legend overlay for multiple devices */}
+            {hasMultipleDevices && (
+              <div className="absolute top-2 right-2 bg-slate-900/90 p-2 rounded text-xs">
+                {devicesWithCoords.map((d, i) => (
+                  <div key={d.id} className="flex items-center gap-1 text-white">
+                    <span className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[10px]">{i + 1}</span>
+                    <span>{d.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Card>
