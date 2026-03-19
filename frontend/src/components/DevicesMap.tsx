@@ -165,47 +165,44 @@ function DeviceTrack({
     return null
   }
 
-  const positions: [number, number][] = track.map(p => [p.latitude, p.longitude])
+  // Helper to interpolate color from orange to green based on position in track
+  const getColor = (index: number, total: number) => {
+    const ratio = index / Math.max(total - 1, 1)
+    // Orange (#f59e0b) to Green (#22c55e)
+    const r = Math.round(245 - ratio * (245 - 34))
+    const g = Math.round(158 + ratio * (197 - 158))
+    const b = Math.round(11 + ratio * (94 - 11))
+    return `rgb(${r}, ${g}, ${b})`
+  }
 
-  // Find segments where vehicle was moving (ignition on)
-  const movingSegments: [number, number][][] = []
-  let currentSegment: [number, number][] = []
+  // Create gradient segments - draw each segment with its own color
+  const gradientSegments: { positions: [number, number][], color: string }[] = []
 
-  track.forEach((point, i) => {
-    if (point.ign_state === 1) {
-      currentSegment.push([point.latitude, point.longitude])
-    } else {
-      if (currentSegment.length >= 2) {
-        movingSegments.push(currentSegment)
-      }
-      currentSegment = []
+  // Only show segments where vehicle was moving (ignition on)
+  for (let i = 0; i < track.length - 1; i++) {
+    const current = track[i]
+    const next = track[i + 1]
+
+    // Only draw if vehicle was moving at this point
+    if (current.ign_state === 1 || next.ign_state === 1) {
+      gradientSegments.push({
+        positions: [[current.latitude, current.longitude], [next.latitude, next.longitude]],
+        color: getColor(i, track.length)
+      })
     }
-  })
-  if (currentSegment.length >= 2) {
-    movingSegments.push(currentSegment)
   }
 
   return (
     <>
-      {/* Full track in light color */}
-      <Polyline
-        positions={positions}
-        pathOptions={{
-          color: '#64748b',
-          weight: 2,
-          opacity: 0.5,
-          dashArray: '5, 10'
-        }}
-      />
-      {/* Moving segments in bright color */}
-      {movingSegments.map((segment, i) => (
+      {/* Gradient track segments */}
+      {gradientSegments.map((segment, i) => (
         <Polyline
           key={i}
-          positions={segment}
+          positions={segment.positions}
           pathOptions={{
-            color: '#f59e0b',
+            color: segment.color,
             weight: 4,
-            opacity: 0.8
+            opacity: 0.9
           }}
         />
       ))}
@@ -277,7 +274,7 @@ export default function DevicesMap({
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 mb-3 text-sm">
+      <div className="flex flex-wrap gap-4 mb-3 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-full bg-green-500"></div>
           <span className="text-slate-400">Двигатель работает</span>
@@ -288,8 +285,8 @@ export default function DevicesMap({
         </div>
         {showTracks && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-1 bg-amber-500 rounded"></div>
-            <span className="text-slate-400">Маршрут движения</span>
+            <div className="w-16 h-2 rounded" style={{ background: 'linear-gradient(to right, #f59e0b, #22c55e)' }}></div>
+            <span className="text-slate-400">Маршрут (оранжевый → начало, зелёный → конец)</span>
           </div>
         )}
       </div>

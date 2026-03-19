@@ -368,13 +368,13 @@ function DeviceCard({ device, onClick, onDelete }: {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-orange-400" />
+            <Battery className="h-4 w-4 text-green-400" />
             <span className="text-sm text-slate-300">
-              {device.motohrs?.toLocaleString() ?? '--'} мч
+              {device.battery_voltage?.toFixed(1) ?? '--'} В
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Battery className="h-4 w-4 text-green-400" />
+            <span className="text-sm text-slate-400">💰</span>
             <span className="text-sm text-slate-300">
               {device.balance?.toFixed(0) ?? '--'} ₽
             </span>
@@ -792,13 +792,13 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Clock className="h-6 w-6 text-orange-400" />
+              <Battery className="h-6 w-6 text-green-400" />
               <div>
-                <p className="text-sm text-slate-400">Моточасы</p>
-                <p className="text-2xl font-bold text-white">{device.motohrs?.toLocaleString() ?? '--'} мч</p>
-                {stats?.motohrs_diff && (
-                  <p className="text-xs text-green-400">+{stats.motohrs_diff.toLocaleString()} мч за 7 дней</p>
-                )}
+                <p className="text-sm text-slate-400">Напряжение АКБ</p>
+                <p className="text-2xl font-bold text-white">{device.battery_voltage?.toFixed(1) ?? '--'} В</p>
+                <p className="text-xs text-slate-500">
+                  {(device.battery_voltage ?? 0) >= 12.5 ? '✓ Норма' : (device.battery_voltage ?? 0) >= 12.0 ? '⚠ Низкое' : '❌ Критическое'}
+                </p>
               </div>
             </div>
           </CardContent>
