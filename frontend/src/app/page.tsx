@@ -78,6 +78,7 @@ interface DeviceState {
   fuel_litres: number
   motohrs: number
   battery_voltage: number
+  gsm_lvl: number
 }
 
 interface ServiceType {
@@ -710,8 +711,8 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
       temp_engine: s.temp_engine,
       mileage: s.mileage,
       fuel: s.fuel_litres,
-      speed: s.speed,
       battery_voltage: s.battery_voltage,
+      gsm_lvl: s.gsm_lvl,
       balance: s.balance
     }
   }).reverse()
@@ -936,10 +937,10 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
             </CardContent>
           </Card>
 
-          {/* Speed Chart */}
+          {/* GSM Level Chart */}
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white text-lg">Скорость</CardTitle>
+              <CardTitle className="text-white text-lg">Уровень GSM сигнала</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-48">
@@ -947,7 +948,7 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="time" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" domain={[0, 32]} />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
                       labelStyle={{ color: '#fff' }}
@@ -955,9 +956,13 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
                         const data = payload?.[0]?.payload
                         return data ? `${data.date} ${label}` : label
                       }}
-                      formatter={(value: number) => [`${value ?? 0} км/ч`, 'Скорость']}
+                      formatter={(value: number) => {
+                        const level = value ?? 0
+                        const quality = level >= 20 ? 'Отлично' : level >= 15 ? 'Хорошо' : level >= 10 ? 'Удовлетворительно' : 'Слабый'
+                        return [`${level} (${quality})`, 'GSM']
+                      }}
                     />
-                    <Line type="monotone" dataKey="speed" stroke="#f59e0b" name="Скорость (км/ч)" dot={false} />
+                    <Line type="monotone" dataKey="gsm_lvl" stroke="#06b6d4" name="GSM уровень" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

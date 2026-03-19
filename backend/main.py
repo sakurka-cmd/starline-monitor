@@ -226,7 +226,7 @@ def history(did: int, hours: int = 24, user=Depends(me)):
     
     c.execute("""
         SELECT timestamp, arm_state, ign_state, temp_inner, temp_engine, 
-               balance, latitude, longitude, speed, mileage, fuel_litres, motohrs, battery_voltage
+               balance, latitude, longitude, speed, mileage, fuel_litres, motohrs, battery_voltage, gsm_lvl
         FROM device_states 
         WHERE device_id=%s AND timestamp>=DATE_SUB(NOW(),INTERVAL %s HOUR) 
         ORDER BY timestamp DESC
