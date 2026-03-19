@@ -294,6 +294,67 @@ def stats(did: int, days: int = 7, user=Depends(me)):
     conn.close()
     return result
 
+@app.get("/api/devices/{did}/track")
+def get_device_track(did: int, hours: int = 24, user=Depends(me)):
+    """Получить трек перемещения устройства за последние N часов"""
+    conn = db()
+    c = conn.cursor(dictionary=True)
+    
+    # Получаем starline_device_id
+    c.execute("SELECT starline_device_id FROM user_devices WHERE id=%s AND user_id=%s", (did, user['user_id']))
+    dev = c.fetchone()
+    if not dev:
+        conn.close()
+        raise HTTPException(404, "Device not found")
+    
+    starline_id = dev['starline_device_id']
+    if not starline_id:
+        conn.close()
+        return []
+    
+    # Получаем точки трека где были координаты
+    c.execute("""
+        SELECT 
+            latitude, longitude, timestamp, speed, ign_state,
+            arm_state, temp_inner, battery_voltage
+        FROM device_states 
+        WHERE device_id=%s 
+        AND latitude IS NOT NULL 
+        AND longitude IS NOT NULL
+        AND timestamp >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+        ORDER BY timestamp ASC
+    """, (starline_id, hours))
+    
+    track = c.fetchall()
+    conn.close()
+    
+    # Фильтруем - убираем точки где координаты не менялись (стоял на месте)
+    filtered_track = []
+    last_lat, last_lon = None, None
+    
+    for point in track:
+        lat = point['latitude']
+        lon = point['longitude']
+        
+        # Добавляем точку если:
+        # - это первая точка
+        # - координаты изменились
+        # - зажигание было включено (движение)
+        # - или прошло больше 5 минут с последней точки
+        if last_lat is None:
+            filtered_track.append(point)
+            last_lat, last_lon = lat, lon
+        elif point['ign_state'] == 1:
+            # При движении добавляем все точки
+            filtered_track.append(point)
+            last_lat, last_lon = lat, lon
+        elif abs(lat - last_lat) > 0.0001 or abs(lon - last_lon) > 0.0001:
+            # Координаты изменились
+            filtered_track.append(point)
+            last_lat, last_lon = lat, lon
+    
+    return filtered_track
+
 # ==================== MAINTENANCE ====================
 
 @app.get("/api/service-types")

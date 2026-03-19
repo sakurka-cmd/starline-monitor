@@ -1,39 +1,85 @@
 'use client'
 
-import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { useEffect, useState, useCallback } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// Fix for default marker icon in react-leaflet
-const defaultIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-})
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-L.Marker.prototype.options.icon = defaultIcon
+// Custom marker with device name
+const createDeviceMarker = (name: string, isRunning: boolean, index: number) => {
+  const color = isRunning ? '#22c55e' : '#3b82f6'
+  const bgColor = isRunning ? '#16a34a' : '#2563eb'
 
-// Custom colored icons for different states
-const createColoredIcon = (color: string) => {
   return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="
-      background-color: ${color};
-      width: 30px;
-      height: 30px;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      border: 2px solid white;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    "></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 30],
-    popupAnchor: [0, -30]
+    className: 'device-marker',
+    html: `
+      <div style="position: relative;">
+        <div style="
+          background: ${color};
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+          font-size: 14px;
+        ">${index + 1}</div>
+        <div style="
+          position: absolute;
+          bottom: -8px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 8px solid transparent;
+          border-right: 8px solid transparent;
+          border-top: 10px solid ${color};
+        "></div>
+        <div style="
+          position: absolute;
+          top: -28px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: ${bgColor};
+          color: white;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        ">${name}</div>
+      </div>
+    `,
+    iconSize: [36, 44],
+    iconAnchor: [18, 44],
+    popupAnchor: [0, -44]
+  })
+}
+
+// Direction arrow marker
+const createArrowMarker = (color: string, direction: number) => {
+  return L.divIcon({
+    className: 'arrow-marker',
+    html: `
+      <div style="
+        width: 16px;
+        height: 16px;
+        transform: rotate(${direction}deg);
+      ">
+        <svg viewBox="0 0 24 24" fill="${color}" width="16" height="16">
+          <path d="M12 2L4 20h16L12 2z"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
   })
 }
 
@@ -48,6 +94,15 @@ interface Device {
   fuel_litres?: number
   battery_voltage?: number
   temp_inner?: number
+  direction?: number
+}
+
+interface TrackPoint {
+  latitude: number
+  longitude: number
+  timestamp: string
+  speed: number
+  ign_state: number
 }
 
 // Component to fit bounds to all markers
@@ -70,6 +125,94 @@ function FitBounds({ devices }: { devices: Device[] }) {
   return null
 }
 
+// Track line component
+function DeviceTrack({
+  deviceId,
+  showTrack,
+  token
+}: {
+  deviceId: number
+  showTrack: boolean
+  token: string | null
+}) {
+  const [track, setTrack] = useState<TrackPoint[]>([])
+  const map = useMap()
+
+  useEffect(() => {
+    if (!showTrack || !token) {
+      setTrack([])
+      return
+    }
+
+    const fetchTrack = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/devices/${deviceId}/track?hours=24`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setTrack(data)
+        }
+      } catch (err) {
+        console.error('Failed to fetch track:', err)
+      }
+    }
+
+    fetchTrack()
+  }, [deviceId, showTrack, token])
+
+  if (!showTrack || track.length < 2) {
+    return null
+  }
+
+  const positions: [number, number][] = track.map(p => [p.latitude, p.longitude])
+
+  // Find segments where vehicle was moving (ignition on)
+  const movingSegments: [number, number][][] = []
+  let currentSegment: [number, number][] = []
+
+  track.forEach((point, i) => {
+    if (point.ign_state === 1) {
+      currentSegment.push([point.latitude, point.longitude])
+    } else {
+      if (currentSegment.length >= 2) {
+        movingSegments.push(currentSegment)
+      }
+      currentSegment = []
+    }
+  })
+  if (currentSegment.length >= 2) {
+    movingSegments.push(currentSegment)
+  }
+
+  return (
+    <>
+      {/* Full track in light color */}
+      <Polyline
+        positions={positions}
+        pathOptions={{
+          color: '#64748b',
+          weight: 2,
+          opacity: 0.5,
+          dashArray: '5, 10'
+        }}
+      />
+      {/* Moving segments in bright color */}
+      {movingSegments.map((segment, i) => (
+        <Polyline
+          key={i}
+          positions={segment}
+          pathOptions={{
+            color: '#f59e0b',
+            weight: 4,
+            opacity: 0.8
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
 export default function DevicesMap({
   devices,
   onSelectDevice
@@ -77,6 +220,15 @@ export default function DevicesMap({
   devices: Device[]
   onSelectDevice: (id: number) => void
 }) {
+  const [showTracks, setShowTracks] = useState(false)
+  const [selectedTrackDevice, setSelectedTrackDevice] = useState<number | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+
+  // Get token from localStorage
+  useEffect(() => {
+    setToken(localStorage.getItem('token'))
+  }, [])
+
   // Filter devices with valid coordinates
   const devicesWithCoords = devices.filter(
     d =>
@@ -100,11 +252,49 @@ export default function DevicesMap({
 
   return (
     <div className="mt-8">
-      <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-        <span className="text-2xl">🗺️</span>
-        Расположение транспортных средств ({devicesWithCoords.length})
-      </h2>
-      <div className="rounded-lg overflow-hidden border border-slate-700" style={{ height: '400px' }}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <span className="text-2xl">🗺️</span>
+          Расположение транспортных средств ({devicesWithCoords.length})
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setShowTracks(!showTracks)
+              if (showTracks) {
+                setSelectedTrackDevice(null)
+              }
+            }}
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+              showTracks
+                ? 'bg-amber-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            {showTracks ? '🎯 Скрыть треки' : '📍 Показать треки'}
+          </button>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 mb-3 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full bg-green-500"></div>
+          <span className="text-slate-400">Двигатель работает</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+          <span className="text-slate-400">На охране</span>
+        </div>
+        {showTracks && (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-1 bg-amber-500 rounded"></div>
+            <span className="text-slate-400">Маршрут движения</span>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg overflow-hidden border border-slate-700" style={{ height: '500px' }}>
         <MapContainer
           center={center}
           zoom={13}
@@ -116,17 +306,35 @@ export default function DevicesMap({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <FitBounds devices={devicesWithCoords} />
-          {devicesWithCoords.map(device => (
+
+          {/* Show tracks for all devices or selected device */}
+          {showTracks && devicesWithCoords.map(device => (
+            <DeviceTrack
+              key={device.id}
+              deviceId={device.id}
+              showTrack={selectedTrackDevice === null || selectedTrackDevice === device.id}
+              token={token}
+            />
+          ))}
+
+          {/* Device markers */}
+          {devicesWithCoords.map((device, index) => (
             <Marker
               key={device.id}
               position={[device.latitude!, device.longitude!]}
-              icon={createColoredIcon(device.ign_state ? '#22c55e' : '#3b82f6')}
+              icon={createDeviceMarker(device.name, !!device.ign_state, index)}
               eventHandlers={{
-                click: () => onSelectDevice(device.id)
+                click: () => {
+                  if (showTracks) {
+                    setSelectedTrackDevice(selectedTrackDevice === device.id ? null : device.id)
+                  } else {
+                    onSelectDevice(device.id)
+                  }
+                }
               }}
             >
               <Popup>
-                <div className="p-1">
+                <div className="p-1 min-w-[200px]">
                   <div className="font-bold text-lg mb-2">{device.name}</div>
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-2">
@@ -172,6 +380,17 @@ export default function DevicesMap({
                       Google
                     </a>
                   </div>
+                  {showTracks && (
+                    <button
+                      className="mt-2 w-full px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700"
+                      onClick={e => {
+                        e.stopPropagation()
+                        setSelectedTrackDevice(selectedTrackDevice === device.id ? null : device.id)
+                      }}
+                    >
+                      {selectedTrackDevice === device.id ? 'Показать все треки' : 'Только этот трек'}
+                    </button>
+                  )}
                 </div>
               </Popup>
             </Marker>
