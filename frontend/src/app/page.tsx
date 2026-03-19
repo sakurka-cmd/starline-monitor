@@ -608,6 +608,17 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [addMaintOpen, setAddMaintOpen] = useState(false)
+  const [chartHours, setChartHours] = useState(24)
+
+  // Period options for charts
+  const chartPeriodOptions = [
+    { value: 6, label: '6 часов' },
+    { value: 12, label: '12 часов' },
+    { value: 24, label: '24 часа' },
+    { value: 72, label: '3 дня' },
+    { value: 168, label: '7 дней' },
+    { value: 720, label: '30 дней' },
+  ]
 
   const fetchData = useCallback(async () => {
     const token = localStorage.getItem('token')
@@ -619,7 +630,7 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
 
       const [deviceRes, statesRes, statsRes, maintRes, upcomingRes, typesRes] = await Promise.all([
         fetch(`${API_BASE}/api/devices/${deviceId}/latest`, { headers }),
-        fetch(`${API_BASE}/api/devices/${deviceId}/state?hours=24`, { headers }),
+        fetch(`${API_BASE}/api/devices/${deviceId}/state?hours=${chartHours}`, { headers }),
         fetch(`${API_BASE}/api/devices/${deviceId}/stats?days=7`, { headers }),
         fetch(`${API_BASE}/api/devices/${deviceId}/maintenance`, { headers }),
         fetch(`${API_BASE}/api/devices/${deviceId}/maintenance/upcoming`, { headers }),
@@ -639,7 +650,7 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
       toast.error('Ошибка загрузки данных')
     }
     setLoading(false)
-  }, [deviceId])
+  }, [deviceId, chartHours])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -846,10 +857,24 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          {/* Period Selector */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-400">Период графиков:</span>
+            <select
+              value={chartHours}
+              onChange={(e) => setChartHours(Number(e.target.value))}
+              className="px-3 py-1.5 rounded text-sm bg-slate-700 text-slate-300 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {chartPeriodOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Temperature Chart */}
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white text-lg">Температура (24ч)</CardTitle>
+              <CardTitle className="text-white text-lg">Температура</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -874,7 +899,7 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
           {/* Fuel Chart */}
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white text-lg">Топливо (24ч)</CardTitle>
+              <CardTitle className="text-white text-lg">Топливо</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-48">

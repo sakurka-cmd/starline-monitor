@@ -129,11 +129,13 @@ function FitBounds({ devices }: { devices: Device[] }) {
 function DeviceTrack({
   deviceId,
   showTrack,
-  token
+  token,
+  hours
 }: {
   deviceId: number
   showTrack: boolean
   token: string | null
+  hours: number
 }) {
   const [track, setTrack] = useState<TrackPoint[]>([])
   const map = useMap()
@@ -146,7 +148,7 @@ function DeviceTrack({
 
     const fetchTrack = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/devices/${deviceId}/track?hours=24`, {
+        const res = await fetch(`${API_BASE}/api/devices/${deviceId}/track?hours=${hours}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
         if (res.ok) {
@@ -159,7 +161,7 @@ function DeviceTrack({
     }
 
     fetchTrack()
-  }, [deviceId, showTrack, token])
+  }, [deviceId, showTrack, token, hours])
 
   if (!showTrack || track.length < 2) {
     return null
@@ -220,6 +222,17 @@ export default function DevicesMap({
   const [showTracks, setShowTracks] = useState(false)
   const [selectedTrackDevice, setSelectedTrackDevice] = useState<number | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [trackHours, setTrackHours] = useState(24)
+
+  // Period options for track
+  const periodOptions = [
+    { value: 6, label: '6 часов' },
+    { value: 12, label: '12 часов' },
+    { value: 24, label: '24 часа' },
+    { value: 72, label: '3 дня' },
+    { value: 168, label: '7 дней' },
+    { value: 720, label: '30 дней' },
+  ]
 
   // Get token from localStorage
   useEffect(() => {
@@ -254,7 +267,18 @@ export default function DevicesMap({
           <span className="text-2xl">🗺️</span>
           Расположение транспортных средств ({devicesWithCoords.length})
         </h2>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {showTracks && (
+            <select
+              value={trackHours}
+              onChange={(e) => setTrackHours(Number(e.target.value))}
+              className="px-3 py-1.5 rounded text-sm bg-slate-700 text-slate-300 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {periodOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => {
               setShowTracks(!showTracks)
@@ -311,6 +335,7 @@ export default function DevicesMap({
               deviceId={device.id}
               showTrack={selectedTrackDevice === null || selectedTrackDevice === device.id}
               token={token}
+              hours={trackHours}
             />
           ))}
 
