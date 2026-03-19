@@ -422,7 +422,7 @@ class Database:
                  temp_inner, temp_engine, balance,
                  latitude, longitude, speed, 
                  mileage, fuel_litres, motohrs,
-                 gsm_level, battery_voltage, raw_data)
+                 gsm_lvl, battery_voltage, raw_data)
                 VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 int(device_id), arm_state, ign_state, temp_inner, temp_engine, balance,
