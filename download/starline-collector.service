@@ -1,0 +1,33 @@
+[Unit]
+Description=StarLine Data Collector Service
+Documentation=https://developer.starline.ru/
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=starline
+Group=starline
+WorkingDirectory=/opt/starline-collector
+ExecStart=/opt/starline-collector/venv/bin/python collector.py -d
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=starline-collector
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/starline_collector.log /opt/starline-collector
+
+# Переменные окружения
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

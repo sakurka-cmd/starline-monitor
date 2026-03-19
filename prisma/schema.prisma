@@ -1,0 +1,162 @@
+// StarLine Monitoring System - MySQL Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Пользователи системы
+model User {
+  id                Int              @id @default(autoincrement())
+  email             String           @unique @db.VarChar(255)
+  passwordHash      String           @map("password_hash") @db.VarChar(255)
+  name              String?          @db.VarChar(255)
+  
+  // StarLine credentials
+  starlineAppId     String?          @map("starline_app_id") @db.VarChar(255)
+  starlineAppSecret String?          @map("starline_app_secret") @db.VarChar(255)
+  starlineLogin     String?          @map("starline_login") @db.VarChar(255)
+  starlinePassword  String?          @map("starline_password") @db.VarChar(255)
+  starlineUserId    String?          @map("starline_user_id") @db.VarChar(64)
+  
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamp
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamp
+  
+  sessions          Session[]
+  userDevices       UserDevice[]
+  
+  @@map("users")
+}
+
+// Сессии пользователей
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  @@index([token])
+  @@map("sessions")
+}
+
+// Устройства пользователей (связь пользователь-устройство)
+model UserDevice {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String    @map("device_id") @db.VarChar(64)
+  deviceName       String?   @map("device_name") @db.VarChar(255)
+  deviceAlias      String?   @map("device_alias") @db.VarChar(255)
+  deviceType       String?   @map("device_type") @db.VarChar(64)
+  isActive         Int       @default(1) @map("is_active")
+  lastSync         DateTime? @map("last_sync") @db.Timestamp
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp
+  
+  @@unique([userId, deviceId])
+  @@index([deviceId])
+  @@map("user_devices")
+}
+
+// Устройства (глобальный реестр)
+model Device {
+  deviceId        String        @id @map("device_id") @db.VarChar(64)
+  name            String?       @db.VarChar(255)
+  alias           String?       @db.VarChar(255)
+  deviceType      String?       @map("device_type") @db.VarChar(64)
+  firmwareVersion String?       @map("firmware_version") @db.VarChar(64)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamp
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamp
+  
+  states          DeviceState[]
+  positions       GpsPosition[]
+  
+  @@index([deviceType])
+  @@map("devices")
+}
+
+// Состояния устройств
+model DeviceState {
+  id             BigInt   @id @default(autoincrement())
+  deviceId       String   @map("device_id") @db.VarChar(64)
+  device         Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  timestamp      DateTime @db.Timestamp
+  
+  // Состояние охраны
+  armState       Int      @default(0) @map("arm_state")
+  
+  // Состояние двигателя
+  ignState       Int      @default(0) @map("ign_state")
+  runTime        Int      @default(0) @map("run_time")
+  
+  // Температуры
+  tempInner      Float?   @map("temp_inner") @db.Decimal(5, 2)
+  tempEngine     Float?   @map("temp_engine") @db.Decimal(5, 2)
+  tempOutdoor    Float?   @map("temp_outdoor") @db.Decimal(5, 2)
+  
+  // Баланс
+  balance        Float?   @db.Decimal(10, 2)
+  
+  // GPS координаты
+  latitude       Float?   @db.Decimal(10, 8)
+  longitude      Float?   @db.Decimal(11, 8)
+  speed          Float?   @db.Decimal(6, 2)
+  
+  // GSM/GPS
+  gsmLevel       Int?     @map("gsm_level")
+  gpsLevel       Int?     @map("gps_level")
+  
+  // Напряжение батареи
+  batteryVoltage Float?   @map("battery_voltage") @db.Decimal(5, 2)
+  
+  // Сырые данные
+  rawData        Json?    @map("raw_data")
+  
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  @@index([deviceId, timestamp])
+  @@index([timestamp])
+  @@map("device_states")
+}
+
+// GPS позиции
+model GpsPosition {
+  id         BigInt   @id @default(autoincrement())
+  deviceId   String   @map("device_id") @db.VarChar(64)
+  device     Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  timestamp  DateTime @db.Timestamp
+  
+  latitude   Float    @db.Decimal(10, 8)
+  longitude  Float    @db.Decimal(11, 8)
+  altitude   Float?   @db.Decimal(8, 2)
+  speed      Float?   @db.Decimal(6, 2)
+  course     Float?   @db.Decimal(5, 2)
+  satellites Int?
+  gpsValid   Int      @default(1) @map("gps_valid")
+  address    String?  @db.VarChar(500)
+  rawData    Json?    @map("raw_data")
+  
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  @@index([deviceId, timestamp])
+  @@map("gps_positions")
+}
+
+// Логи сбора данных
+model CollectorLog {
+  id        BigInt   @id @default(autoincrement())
+  timestamp DateTime @default(now()) @db.Timestamp
+  level     String   @db.VarChar(20)
+  message   String   @db.Text
+  details   Json?
+  deviceId  String?  @map("device_id") @db.VarChar(64)
+  
+  @@index([timestamp])
+  @@index([level])
+  @@map("collector_logs")
+}
