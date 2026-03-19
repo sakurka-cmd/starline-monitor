@@ -700,13 +700,21 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
     )
   }
 
-  const chartData = states.map(s => ({
-    time: new Date(s.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-    temp_inner: s.temp_inner,
-    temp_engine: s.temp_engine,
-    mileage: s.mileage,
-    fuel: s.fuel_litres
-  })).reverse()
+  const chartData = states.map(s => {
+    const date = new Date(s.timestamp)
+    return {
+      time: date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+      date: date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }),
+      fullDate: date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      temp_inner: s.temp_inner,
+      temp_engine: s.temp_engine,
+      mileage: s.mileage,
+      fuel: s.fuel_litres,
+      speed: s.speed,
+      battery_voltage: s.battery_voltage,
+      balance: s.balance
+    }
+  }).reverse()
 
   return (
     <div className="space-y-6">
@@ -886,10 +894,70 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
                     <Tooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
                       labelStyle={{ color: '#fff' }}
+                      labelFormatter={(label, payload) => {
+                        const data = payload?.[0]?.payload
+                        return data ? `${data.date} ${label}` : label
+                      }}
                     />
                     <Legend />
                     <Line type="monotone" dataKey="temp_inner" stroke="#3b82f6" name="Салон" dot={false} />
                     <Line type="monotone" dataKey="temp_engine" stroke="#ef4444" name="Двигатель" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Battery Voltage Chart */}
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white text-lg">Напряжение АКБ</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="time" stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" domain={[11, 15]} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
+                      labelStyle={{ color: '#fff' }}
+                      labelFormatter={(label, payload) => {
+                        const data = payload?.[0]?.payload
+                        return data ? `${data.date} ${label}` : label
+                      }}
+                      formatter={(value: number) => [`${value?.toFixed(1)} В`, 'Напряжение']}
+                    />
+                    <Line type="monotone" dataKey="battery_voltage" stroke="#22c55e" name="Напряжение (В)" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Speed Chart */}
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white text-lg">Скорость</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="time" stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
+                      labelStyle={{ color: '#fff' }}
+                      labelFormatter={(label, payload) => {
+                        const data = payload?.[0]?.payload
+                        return data ? `${data.date} ${label}` : label
+                      }}
+                      formatter={(value: number) => [`${value ?? 0} км/ч`, 'Скорость']}
+                    />
+                    <Line type="monotone" dataKey="speed" stroke="#f59e0b" name="Скорость (км/ч)" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -911,8 +979,41 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
                     <Tooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
                       labelStyle={{ color: '#fff' }}
+                      labelFormatter={(label, payload) => {
+                        const data = payload?.[0]?.payload
+                        return data ? `${data.date} ${label}` : label
+                      }}
+                      formatter={(value: number) => [`${value?.toFixed(1)} л`, 'Топливо']}
                     />
                     <Line type="monotone" dataKey="fuel" stroke="#eab308" name="Топливо (л)" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Balance Chart */}
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white text-lg">Баланс SIM</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="time" stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #374151' }}
+                      labelStyle={{ color: '#fff' }}
+                      labelFormatter={(label, payload) => {
+                        const data = payload?.[0]?.payload
+                        return data ? `${data.date} ${label}` : label
+                      }}
+                      formatter={(value: number) => [`${value?.toFixed(0)} ₽`, 'Баланс']}
+                    />
+                    <Line type="monotone" dataKey="balance" stroke="#8b5cf6" name="Баланс (₽)" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

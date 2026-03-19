@@ -220,7 +220,7 @@ export default function DevicesMap({
   onSelectDevice: (id: number) => void
 }) {
   const [showTracks, setShowTracks] = useState(false)
-  const [selectedTrackDevice, setSelectedTrackDevice] = useState<number | null>(null)
+  const [enabledTracks, setEnabledTracks] = useState<Set<number>>(new Set())
   const [token, setToken] = useState<string | null>(null)
   const [trackHours, setTrackHours] = useState(24)
 
@@ -238,6 +238,31 @@ export default function DevicesMap({
   useEffect(() => {
     setToken(localStorage.getItem('token'))
   }, [])
+
+  // Initialize all tracks enabled when showTracks becomes true
+  useEffect(() => {
+    if (showTracks) {
+      setEnabledTracks(new Set(devicesWithCoords.map(d => d.id)))
+    }
+  }, [showTracks])
+
+  const toggleTrack = (deviceId: number) => {
+    const newEnabled = new Set(enabledTracks)
+    if (newEnabled.has(deviceId)) {
+      newEnabled.delete(deviceId)
+    } else {
+      newEnabled.add(deviceId)
+    }
+    setEnabledTracks(newEnabled)
+  }
+
+  const enableAllTracks = () => {
+    setEnabledTracks(new Set(devicesWithCoords.map(d => d.id)))
+  }
+
+  const disableAllTracks = () => {
+    setEnabledTracks(new Set())
+  }
 
   // Filter devices with valid coordinates
   const devicesWithCoords = devices.filter(
@@ -269,21 +294,37 @@ export default function DevicesMap({
         </h2>
         <div className="flex items-center gap-3">
           {showTracks && (
-            <select
-              value={trackHours}
-              onChange={(e) => setTrackHours(Number(e.target.value))}
-              className="px-3 py-1.5 rounded text-sm bg-slate-700 text-slate-300 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {periodOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <>
+              <select
+                value={trackHours}
+                onChange={(e) => setTrackHours(Number(e.target.value))}
+                className="px-3 py-1.5 rounded text-sm bg-slate-700 text-slate-300 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {periodOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={enableAllTracks}
+                className="px-2 py-1 rounded text-xs bg-slate-600 text-slate-300 hover:bg-slate-500"
+                title="Включить все треки"
+              >
+                ✓ Все
+              </button>
+              <button
+                onClick={disableAllTracks}
+                className="px-2 py-1 rounded text-xs bg-slate-600 text-slate-300 hover:bg-slate-500"
+                title="Выключить все треки"
+              >
+                ✕ Сброс
+              </button>
+            </>
           )}
           <button
             onClick={() => {
               setShowTracks(!showTracks)
-              if (showTracks) {
-                setSelectedTrackDevice(null)
+              if (!showTracks) {
+                setEnabledTracks(new Set(devicesWithCoords.map(d => d.id)))
               }
             }}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
@@ -297,7 +338,7 @@ export default function DevicesMap({
         </div>
       </div>
 
-      {/* Legend */}
+      {/* Legend and Track Toggles */}
       <div className="flex flex-wrap gap-4 mb-3 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-full bg-green-500"></div>
@@ -315,6 +356,26 @@ export default function DevicesMap({
         )}
       </div>
 
+      {/* Device track toggles */}
+      {showTracks && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {devicesWithCoords.map(device => (
+            <label
+              key={device.id}
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-700/50 cursor-pointer hover:bg-slate-700 transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={enabledTracks.has(device.id)}
+                onChange={() => toggleTrack(device.id)}
+                className="w-4 h-4 rounded border-slate-500 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-slate-300">{device.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-lg overflow-hidden border border-slate-700" style={{ height: '500px' }}>
         <MapContainer
           center={center}
@@ -328,12 +389,12 @@ export default function DevicesMap({
           />
           <FitBounds devices={devicesWithCoords} />
 
-          {/* Show tracks for all devices or selected device */}
+          {/* Show tracks for enabled devices */}
           {showTracks && devicesWithCoords.map(device => (
             <DeviceTrack
               key={device.id}
               deviceId={device.id}
-              showTrack={selectedTrackDevice === null || selectedTrackDevice === device.id}
+              showTrack={enabledTracks.has(device.id)}
               token={token}
               hours={trackHours}
             />
@@ -347,11 +408,7 @@ export default function DevicesMap({
               icon={createDeviceMarker(device.name, !!device.ign_state, index)}
               eventHandlers={{
                 click: () => {
-                  if (showTracks) {
-                    setSelectedTrackDevice(selectedTrackDevice === device.id ? null : device.id)
-                  } else {
-                    onSelectDevice(device.id)
-                  }
+                  onSelectDevice(device.id)
                 }
               }}
             >
@@ -407,10 +464,10 @@ export default function DevicesMap({
                       className="mt-2 w-full px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700"
                       onClick={e => {
                         e.stopPropagation()
-                        setSelectedTrackDevice(selectedTrackDevice === device.id ? null : device.id)
+                        toggleTrack(device.id)
                       }}
                     >
-                      {selectedTrackDevice === device.id ? 'Показать все треки' : 'Только этот трек'}
+                      {enabledTracks.has(device.id) ? 'Скрыть трек' : 'Показать трек'}
                     </button>
                   )}
                 </div>
