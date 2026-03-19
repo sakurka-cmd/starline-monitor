@@ -136,11 +136,11 @@ def list_dev(user=Depends(me)):
             ud.last_update, ud.created_at,
             ds.arm_state, ds.ign_state, ds.temp_inner, ds.temp_engine, 
             ds.balance, ds.latitude, ds.longitude, ds.timestamp as state_timestamp,
-            ds.mileage, ds.fuel_litres, ds.motohrs, ds.speed, ds.battery_voltage
+            ds.mileage, ds.fuel_litres, ds.motohrs, ds.speed, ds.battery_voltage, ds.gsm_lvl
         FROM user_devices ud
         LEFT JOIN (
             SELECT device_id, arm_state, ign_state, temp_inner, temp_engine, 
-                   balance, latitude, longitude, timestamp, mileage, fuel_litres, motohrs, speed, battery_voltage,
+                   balance, latitude, longitude, timestamp, mileage, fuel_litres, motohrs, speed, battery_voltage, gsm_lvl,
                    ROW_NUMBER() OVER (PARTITION BY device_id ORDER BY timestamp DESC) as rn
             FROM device_states
         ) ds ON ud.starline_device_id = ds.device_id AND ds.rn = 1
@@ -208,6 +208,7 @@ def latest(did: int, user=Depends(me)):
         dev['motohrs'] = st.get('motohrs')
         dev['speed'] = st.get('speed')
         dev['battery_voltage'] = st.get('battery_voltage')
+        dev['gsm_lvl'] = st.get('gsm_lvl')
     
     return {"device": dev, "state": st}
 

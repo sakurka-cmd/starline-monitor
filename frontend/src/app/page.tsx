@@ -30,7 +30,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   Shield, Flame, Thermometer, Battery, Droplet, Gauge, Clock, MapPin,
   Plus, Trash2, LogOut, Car, Wrench, AlertTriangle, CheckCircle,
-  TrendingUp, Calendar, FuelIcon, Settings
+  TrendingUp, Calendar, FuelIcon, Settings, Signal
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -62,6 +62,7 @@ interface Device {
   motohrs?: number
   speed?: number
   battery_voltage?: number
+  gsm_lvl?: number
 }
 
 interface DeviceState {
@@ -351,9 +352,9 @@ function DeviceCard({ device, onClick, onDelete }: {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-purple-400" />
+            <Signal className="h-4 w-4 text-cyan-400" />
             <span className="text-sm text-slate-300">
-              {device.speed ?? 0} км/ч
+              GSM: {device.gsm_lvl ?? '--'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -758,10 +759,10 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-purple-400" />
+              <Signal className="h-5 w-5 text-cyan-400" />
               <div>
-                <p className="text-sm text-slate-400">Скорость</p>
-                <p className="text-lg font-semibold text-white">{device.speed ?? 0} км/ч</p>
+                <p className="text-sm text-slate-400">GSM сигнал</p>
+                <p className="text-lg font-semibold text-white">{device.gsm_lvl ?? '--'}</p>
               </div>
             </div>
           </CardContent>
@@ -802,9 +803,6 @@ function DeviceDetail({ deviceId, onBack }: { deviceId: number; onBack: () => vo
               <div>
                 <p className="text-sm text-slate-400">Топливо</p>
                 <p className="text-2xl font-bold text-white">{device.fuel_litres?.toFixed(1) ?? '--'} л</p>
-                {stats?.fuel_stats && (
-                  <p className="text-xs text-slate-400">Средн: {stats.fuel_stats.avg_fuel?.toFixed(1)} л</p>
-                )}
               </div>
             </div>
           </CardContent>
