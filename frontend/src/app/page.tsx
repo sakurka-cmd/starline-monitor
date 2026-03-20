@@ -192,6 +192,7 @@ function AuthForm({ onLogin, onRegister }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('Form submitted!', { isLogin, email, hasPassword: !!password })
     setLoading(true)
     try {
       if (isLogin) {
@@ -201,6 +202,7 @@ function AuthForm({ onLogin, onRegister }: {
       }
       toast.success(isLogin ? 'Вход выполнен' : 'Регистрация успешна')
     } catch (err: any) {
+      console.error('Auth error:', err)
       toast.error(err.message || 'Ошибка')
     }
     setLoading(false)
@@ -227,45 +229,57 @@ function AuthForm({ onLogin, onRegister }: {
                   id="name"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="bg-slate-700/50 border-slate-600 text-white"
+                  className="bg-slate-700/50 border-slate-600 text-white text-base"
                   required={!isLogin}
+                  autoComplete="name"
                 />
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-300">Email</Label>
+              <Label htmlFor="auth-email" className="text-slate-300">Email</Label>
               <Input
-                id="email"
+                id="auth-email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="bg-slate-700/50 border-slate-600 text-white"
+                className="bg-slate-700/50 border-slate-600 text-white text-base"
                 required
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-300">Пароль</Label>
+              <Label htmlFor="auth-password" className="text-slate-300">Пароль</Label>
               <Input
-                id="password"
+                id="auth-password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="bg-slate-700/50 border-slate-600 text-white"
+                className="bg-slate-700/50 border-slate-600 text-white text-base"
                 required
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                autoCapitalize="none"
               />
             </div>
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+            <button
+              type="submit"
+              className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 cursor-pointer"
+              disabled={loading}
+              style={{ touchAction: 'manipulation' }}
+            >
               {loading ? 'Загрузка...' : (isLogin ? 'Войти' : 'Зарегистрироваться')}
-            </Button>
+            </button>
           </form>
           <div className="mt-4 text-center">
-            <Button
-              variant="link"
+            <button
+              type="button"
               onClick={() => setIsLogin(!isLogin)}
-              className="text-slate-400 hover:text-white"
+              className="text-slate-400 hover:text-white text-sm py-2 px-4 cursor-pointer"
+              style={{ touchAction: 'manipulation' }}
             >
               {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-            </Button>
+            </button>
           </div>
         </CardContent>
       </Card>
