@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-StarLine Worker v4.1 - С сохранением сессии, пробега, топлива, моточасов
+StarLine Worker v4.2 - С сохранением сессии, пробега, топлива, моточасов
+Added: delay between sessions, 429 backoff
 """
 
 import hashlib
@@ -27,13 +28,7 @@ class Config:
     mysql_user: str = "starline"
     mysql_password: str = "starline123"
     mysql_database: str = "starline_db"
-    poll_interval_seconds: int = 60
-
-    @classmethod
-    def from_file(cls, filepath: str) -> 'Config':
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+    poll_interval_seconds: int = 180  # Changed default from 60 to 180
 
     @classmethod
     def from_env(cls) -> 'Config':
@@ -43,7 +38,7 @@ class Config:
             mysql_user=os.getenv("MYSQL_USER", "starline"),
             mysql_password=os.getenv("MYSQL_PASSWORD", "starline123"),
             mysql_database=os.getenv("MYSQL_DATABASE", "starline_db"),
-            poll_interval_seconds=int(os.getenv("POLL_INTERVAL", "60")),
+            poll_interval_seconds=int(os.getenv("POLL_INTERVAL", "180")),
         )
 
 
@@ -184,12 +179,18 @@ class StarLineAPI:
             self.logger.error(f"Auth error: {e}")
             return False
 
-    def get_devices(self) -> List[Dict]:
+    def get_devices(self) -> Optional[List[Dict]]:
         if not self.user_id:
-            return []
+            return None
 
         url = f"{self.WEBAPI_URL}/json/v1/user/{self.user_id}/devices"
         resp = self.session.get(url)
+        
+        # Check for rate limiting
+        if resp.status_code == 429:
+            self.logger.error("Rate limited (429)")
+            return None
+        
         result = resp.json()
 
         self.logger.info(f"Devices response: code={result.get('code')}")
@@ -206,13 +207,18 @@ class StarLineAPI:
         self.logger.info(f"Found {len(devices)} devices")
         return devices
 
-    def get_device_data(self, device_id: str) -> Dict:
+    def get_device_data(self, device_id: str) -> Optional[Dict]:
         """Получение полных данных устройства"""
         data = {}
 
         # Endpoint 1: /json/v3/device/{id}/data - основная информация
         url1 = f"{self.WEBAPI_URL}/json/v3/device/{device_id}/data"
         resp1 = self.session.get(url1)
+        
+        if resp1.status_code == 429:
+            self.logger.error("Rate limited (429) on device data")
+            return None
+            
         result1 = resp1.json()
 
         if result1.get("code") in [200, "200"]:
@@ -221,6 +227,11 @@ class StarLineAPI:
         # Endpoint 2: /json/device/{id}/state - состояние
         url2 = f"{self.WEBAPI_URL}/json/device/{device_id}/state"
         resp2 = self.session.get(url2)
+        
+        if resp2.status_code == 429:
+            self.logger.error("Rate limited (429) on device state")
+            return None
+            
         result2 = resp2.json()
 
         if result2.get("code") in [200, "200"]:
@@ -405,6 +416,8 @@ class Database:
 
 
 class Worker:
+    RATE_LIMITED = False  # Global flag for rate limiting
+    
     def __init__(self, config: Config):
         self.config = config
         self.db: Optional[Database] = None
@@ -420,10 +433,15 @@ class Worker:
         self.db = Database(self.config)
         return self.db.connect()
 
-    def process_device(self, user_device: Dict):
-        self.logger.info(f"\nProcessing: {user_device['name']} (user: {user_device['user_email']})")
+    def process_device(self, user_device: Dict) -> bool:
+        """Process one user device. Returns False if rate limited."""
+        self.logger.info(f"\n==================================================")
+        self.logger.info(f"Processing 1 devices for {user_device['app_id']} (appId: {user_device.get('app_id')})")
 
         session = self.db.get_session(user_device['id'])
+        
+        if session.get('slnet_token'):
+            self.logger.info("Found cached slnet_token in DB")
         
         api = StarLineAPI(
             app_id=user_device['app_id'],
@@ -438,16 +456,21 @@ class Worker:
             self.logger.info("Session invalid, re-authenticating...")
             if not api.authenticate():
                 self.db.update_device_status(user_device['id'], error="Auth failed")
-                return
+                return True  # Continue with other devices
             self.db.save_session(user_device['id'], api.slnet_token, str(api.user_id))
         else:
-            self.logger.info("Using cached session")
+            self.logger.info("Using memory cached session for " + user_device['app_id'])
 
         devices = api.get_devices()
 
+        if devices is None:
+            # Rate limited
+            self.logger.warning("No devices from StarLine API")
+            return False  # Signal rate limit
+
         if not devices:
             self.db.update_device_status(user_device['id'], error="No devices")
-            return
+            return True
 
         for device in devices:
             device_id = device.get("device_id") or device.get("id")
@@ -467,6 +490,9 @@ class Worker:
 
             # Получаем и сохраняем состояние
             state = api.get_device_data(str(device_id))
+            if state is None:
+                # Rate limited
+                return False
             if state:
                 self.db.save_state(str(device_id), state)
 
@@ -476,22 +502,36 @@ class Worker:
                 device_name=device_name,
                 error=None
             )
+        
+        return True
 
     def run_once(self):
         self.logger.info("=" * 50)
         self.logger.info(f"Worker started (interval: {self.config.poll_interval_seconds}s)")
 
         user_devices = self.db.get_user_devices()
-        self.logger.info(f"Found {len(user_devices)} StarLine accounts")
+        self.logger.info(f"Found {len(user_devices)} devices in {len(user_devices)} sessions")
 
-        for user_device in user_devices:
+        rate_limited = False
+        
+        for i, user_device in enumerate(user_devices):
             try:
-                self.process_device(user_device)
+                result = self.process_device(user_device)
+                if not result:
+                    rate_limited = True
+                    break  # Stop processing on rate limit
+                
+                # Add delay between sessions (5 seconds)
+                if i < len(user_devices) - 1:
+                    self.logger.info("Waiting 5s before next session...")
+                    time.sleep(5)
+                    
             except Exception as e:
                 self.logger.error(f"Error: {e}")
                 self.db.update_device_status(user_device['id'], error=str(e))
 
         self.logger.info("Done.")
+        return rate_limited
 
     def run_daemon(self):
         def handler(sig, frame):
@@ -507,17 +547,34 @@ class Worker:
         self.running = True
         self.logger.info("Worker daemon started")
 
+        consecutive_rate_limits = 0
+        
         while self.running:
             try:
-                self.run_once()
-                self.logger.info(f"Sleeping {self.config.poll_interval_seconds}s...")
+                rate_limited = self.run_once()
+                
+                if rate_limited:
+                    consecutive_rate_limits += 1
+                    # Exponential backoff: 5min, 10min, 20min, etc
+                    backoff = min(300 * (2 ** consecutive_rate_limits), 1800)  # Max 30 min
+                    self.logger.warning(f"Rate limited! Waiting {backoff}s before retry...")
+                    
+                    for _ in range(backoff):
+                        if not self.running:
+                            break
+                        time.sleep(1)
+                else:
+                    consecutive_rate_limits = 0
+                    self.logger.info(f"Sleeping {self.config.poll_interval_seconds}s...")
+                    
+                    for _ in range(self.config.poll_interval_seconds):
+                        if not self.running:
+                            break
+                        time.sleep(1)
+                        
             except Exception as e:
                 self.logger.error(f"Error: {e}")
-
-            for _ in range(self.config.poll_interval_seconds):
-                if not self.running:
-                    break
-                time.sleep(1)
+                time.sleep(60)
 
         self.db.close()
         self.logger.info("Worker stopped")
@@ -526,15 +583,12 @@ class Worker:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="StarLine Worker v4.1")
-    parser.add_argument("-c", "--config", default="config.json")
+    parser = argparse.ArgumentParser(description="StarLine Worker v4.2")
     parser.add_argument("-d", "--daemon", action="store_true", help="Run as daemon")
     args = parser.parse_args()
 
-    if os.path.exists(args.config):
-        config = Config.from_file(args.config)
-    else:
-        config = Config.from_env()
+    # Always use environment variables
+    config = Config.from_env()
 
     worker = Worker(config)
 

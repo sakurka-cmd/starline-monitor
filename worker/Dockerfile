@@ -6,6 +6,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY worker.py .
-COPY config.json .
 
-CMD ["python", "worker.py", "-c", "config.json", "--daemon"]
+CMD ["python", "worker.py", "--daemon"]

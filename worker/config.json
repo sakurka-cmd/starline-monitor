@@ -1,8 +1,0 @@
-{
-    "mysql_host": "mysql",
-    "mysql_port": 3306,
-    "mysql_user": "starline",
-    "mysql_password": "starline123",
-    "mysql_database": "starline_db",
-    "poll_interval_seconds": 60
-}

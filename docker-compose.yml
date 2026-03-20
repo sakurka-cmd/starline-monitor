@@ -47,7 +47,7 @@ services:
       MYSQL_USER: starline
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-starline123}
       MYSQL_DATABASE: starline_db
-      POLL_INTERVAL: 60
+      POLL_INTERVAL: 180
     depends_on:
       mysql:
         condition: service_healthy
